@@ -1,0 +1,279 @@
+---
+title: "Ant Climate Project"
+subtitle: "Path analysis: Tropical vs Temperate vs Both"
+author: "Louis Bell-Roberts"
+output:
+  pdf_document:
+    number_sections: true
+    fig_caption: true
+    includes:  
+      in_header: preamble-latex.tex
+urlcolor: blue
+date: \today
+---
+
+\tableofcontents
+\newpage 
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=F, warning=F, fig.align='center')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = T)
+# Packages
+library(data.table)
+library(ape)
+library(ggtree) ## Basic ggplot package for trees
+library(ggtreeExtra) ## For fancy tree plotting
+library(ufs) ## For ggqq plot
+library(phylolm)
+library(rr2)
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(phylopath)
+library(phylolm)
+library(phytools)
+theme_set(theme_minimal())
+library(kableExtra)
+library(stringr)
+# global plotting options for histogram
+xmin= -7.5
+xmax= 0
+```
+
+Read in the ant data and prepare the variables for path analysis. There are 474 species (116 Tropical, 190 for Temperate and 168 for 'Both') for which data is available for colony size and climatic variables, excluding special ants. 
+```{r Read in ant data for both tropical and other}
+ant_data_tropical<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Tropical_ant_data.csv")
+ant_data_temperate<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Temperate_ant_data_230804.csv")
+ant_data_both<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Both_ant_data_230804.csv")
+
+#Assign rownames as species names
+rownames(ant_data_tropical) <- ant_data_tropical$valid_species_name
+rownames(ant_data_temperate) <- ant_data_temperate$valid_species_name
+rownames(ant_data_both) <- ant_data_both$valid_species_name
+
+#Log transform colony size variable
+ant_data_tropical$colony.size.y <- log10(ant_data_tropical$colony.size.y)
+ant_data_temperate$colony.size.y <- log10(ant_data_temperate$colony.size.y)
+ant_data_both$colony.size.y <- log10(ant_data_both$colony.size.y)
+
+#Square root transform PREavg_avg variable
+ant_data_tropical$PREavg_avg <- sqrt(ant_data_tropical$PREavg_avg)
+ant_data_temperate$PREavg_avg <- sqrt(ant_data_temperate$PREavg_avg)
+ant_data_both$PREavg_avg <- sqrt(ant_data_both$PREavg_avg)
+
+#Square root transform TMPsd_avg variable
+ant_data_tropical$TMPsd_avg <- sqrt(ant_data_tropical$TMPsd_avg)
+ant_data_temperate$TMPsd_avg <- sqrt(ant_data_temperate$TMPsd_avg)
+ant_data_both$TMPsd_avg <- sqrt(ant_data_both$TMPsd_avg)
+
+#Assign Poly_id as a factor
+ant_data_tropical$poly_id <- as.factor(ant_data_tropical$poly_id)
+ant_data_temperate$poly_id <- as.factor(ant_data_temperate$poly_id)
+ant_data_both$poly_id <- as.factor(ant_data_both$poly_id)
+
+#Read in trees
+##Tropical species trees
+tropical_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_tropical_pruned_MCC.tre")
+tropical_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_tropical_pruned_MCC.tre")
+tropical_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_tropical_pruned_MCC.tre")
+tropical_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_tropical_pruned_MCC.tre")
+
+##Temperate species trees
+temperate_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_temperate_pruned_MCC.tre")
+temperate_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_temperate_pruned_MCC.tre")
+temperate_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_temperate_pruned_MCC.tre")
+temperate_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_temperate_pruned_MCC.tre")
+
+##Both species trees
+both_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_both_pruned_MCC.tre")
+both_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_both_pruned_MCC.tre")
+both_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_both_pruned_MCC.tre")
+both_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_both_pruned_MCC.tre")
+
+#Select columns of interest
+##Tropical - just TMPsd
+ant_data_tropical_TMPsd_selected <- ant_data_tropical %>% dplyr::select(valid_species_name, poly_id, colony.size.y, TMPsd_avg)
+
+##Temperate - just PREavg
+ant_data_temperate_PREavg_selected <- ant_data_temperate %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PREavg_avg)
+
+##Both - PREavg (however, PREavg and DTRavg were also predictors)
+ant_data_both_PREavg_selected <- ant_data_both %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PREavg_avg)
+
+#Rename the variables used in the analysis
+##Tropical - just TMPsd
+ant_data_tropical_TMPsd_selected_named <- ant_data_tropical_TMPsd_selected %>% 
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         TMPsd=TMPsd_avg)
+
+##Temperate - PREavg
+ant_data_temperate_PREavg_selected_named <- ant_data_temperate_PREavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         PREavg=PREavg_avg)
+
+##Both - PREavg
+ant_data_both_PREavg_selected_named <- ant_data_both_PREavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         PREavg=PREavg_avg)
+```
+
+# Create alternative causal models
+When more than on climatic variable is present in the best model (based on AIC model selection), we divide the path analysis into multiple different analyses. This is because path analysis would not accept having more than one climatic predictor in the analysis because the linear models produced had highly significant relationships between the multiple climatic predictors being analysed. The potential model set is reduced to just four models for each analysis, based on all of the possible models given that colony size has a direct effect on the number of worker castes.
+
+## Tropical
+### Alternative causal models - TMPsd
+```{r Tropical - Define the potential causal models TMPsd, fig.width=8, fig.height=4}
+### The final set of path models ###
+#Define the models for the analysis: response before the ~, effector after the ~
+
+tropical_TMPsd_models <- define_model_set(
+  one = c(Poly_id ~ TMPsd, Poly_id ~ Colony_size),
+  two = c(TMPsd ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ TMPsd, Poly_id ~ Colony_size),
+  four = c(TMPsd ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#TMP model set - 4 models
+plot_model_set(tropical_TMPsd_models, box_x = 22, box_y = 8, text_size = 3.5)
+```
+
+### Path analysis
+#### TMPsd
+```{r Tropical - Analyse models TMPsd, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees (changing model of evolution does have effect on outcome, even though phyloglm doesn't have a 'method' option, while phylolm does)
+tropical_TMPsd_result_NCuniform_stem <- phylo_path(tropical_TMPsd_models, data = ant_data_tropical_TMPsd_selected_named, tree = tropical_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+tropical_TMPsd_result_NCuniform_crown <- phylo_path(tropical_TMPsd_models, data = ant_data_tropical_TMPsd_selected_named, tree = tropical_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+tropical_TMPsd_result_FBD_stem <- phylo_path(tropical_TMPsd_models, data = ant_data_tropical_TMPsd_selected_named, tree = tropical_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+tropical_TMPsd_result_FBD_crown <- phylo_path(tropical_TMPsd_models, data = ant_data_tropical_TMPsd_selected_named, tree = tropical_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+
+
+#Summarise the models
+summary(tropical_TMPsd_result_NCuniform_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(tropical_TMPsd_result_NCuniform_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(tropical_TMPsd_result_FBD_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(tropical_TMPsd_result_FBD_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+
+#Plot model summaries
+plot(summary(tropical_TMPsd_result_NCuniform_stem))
+plot(summary(tropical_TMPsd_result_NCuniform_crown))
+plot(summary(tropical_TMPsd_result_FBD_stem))
+plot(summary(tropical_TMPsd_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+tropical_TMPsd_average_model_full_NCuniform_stem <- average(tropical_TMPsd_result_NCuniform_stem, avg_method = "full")
+tropical_TMPsd_average_model_full_NCuniform_crown <- average(tropical_TMPsd_result_NCuniform_crown, avg_method = "full")
+tropical_TMPsd_average_model_full_FBD_stem <- average(tropical_TMPsd_result_FBD_stem, avg_method = "full")
+tropical_TMPsd_average_model_full_FBD_crown <- average(tropical_TMPsd_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(tropical_TMPsd_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPsd_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPsd_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPsd_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+## Temperate
+
+### Alternative causal models - PREavg
+```{r Temperate - Define the potential causal models PREavg, fig.width=10, fig.height=6}
+temperate_PREavg_models <- define_model_set(
+  one = c(Poly_id ~ PREavg, Poly_id ~ Colony_size),
+  two = c(PREavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ PREavg, Poly_id ~ Colony_size),
+  four = c(PREavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PRE model set - 4 models
+plot_model_set(temperate_PREavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+
+#### PREavg
+```{r Temperate - Analyse models PREavg, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees
+temperate_PREavg_result_NCuniform_stem <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+temperate_PREavg_result_NCuniform_crown  <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+temperate_PREavg_result_FBD_stem <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+temperate_PREavg_result_FBD_crown <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+
+#Summarise the models
+summary(temperate_PREavg_result_NCuniform_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(temperate_PREavg_result_NCuniform_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(temperate_PREavg_result_FBD_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(temperate_PREavg_result_FBD_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+
+#Plot model summaries
+plot(summary(temperate_PREavg_result_NCuniform_stem))
+plot(summary(temperate_PREavg_result_NCuniform_crown))
+plot(summary(temperate_PREavg_result_FBD_stem))
+plot(summary(temperate_PREavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+temperate_PREavg_average_model_full_NCuniform_stem <- average(temperate_PREavg_result_NCuniform_stem, avg_method = "full")
+temperate_PREavg_average_model_full_NCuniform_crown <- average(temperate_PREavg_result_NCuniform_crown, avg_method = "full")
+temperate_PREavg_average_model_full_FBD_stem <- average(temperate_PREavg_result_FBD_stem, avg_method = "full")
+temperate_PREavg_average_model_full_FBD_crown <- average(temperate_PREavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(temperate_PREavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+## Both
+
+### Alternative causal models - PREavg
+```{r Both - Define the potential causal models PREavg, fig.width=10, fig.height=6}
+both_PREavg_models <- define_model_set(
+  one = c(Poly_id ~ PREavg, Poly_id ~ Colony_size),
+  two = c(PREavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ PREavg, Poly_id ~ Colony_size),
+  four = c(PREavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PRE model set - 4 models
+plot_model_set(both_PREavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+
+#### PREavg
+```{r Both - Analyse models PREavg, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees
+both_PREavg_result_NCuniform_stem <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+both_PREavg_result_NCuniform_crown  <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+both_PREavg_result_FBD_stem <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+both_PREavg_result_FBD_crown <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+
+#Summarise the models
+summary(both_PREavg_result_NCuniform_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(both_PREavg_result_NCuniform_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(both_PREavg_result_FBD_stem) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+summary(both_PREavg_result_FBD_crown) #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+
+#Plot model summaries
+plot(summary(both_PREavg_result_NCuniform_stem))
+plot(summary(both_PREavg_result_NCuniform_crown))
+plot(summary(both_PREavg_result_FBD_stem))
+plot(summary(both_PREavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+both_PREavg_average_model_full_NCuniform_stem <- average(both_PREavg_result_NCuniform_stem, avg_method = "full")
+both_PREavg_average_model_full_NCuniform_crown <- average(both_PREavg_result_NCuniform_crown, avg_method = "full")
+both_PREavg_average_model_full_FBD_stem <- average(both_PREavg_result_FBD_stem, avg_method = "full")
+both_PREavg_average_model_full_FBD_crown <- average(both_PREavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(both_PREavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+

@@ -1,0 +1,898 @@
+---
+title: "Ant Climate Project"
+subtitle: "Path analysis: Tropical vs Temperate vs Both. No transformations"
+author: "Louis Bell-Roberts"
+output:
+  pdf_document:
+    number_sections: true
+    fig_caption: true
+    includes:  
+      in_header: preamble-latex.tex
+urlcolor: blue
+date: \today
+---
+
+\tableofcontents
+\newpage 
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=F, warning=F, fig.align='center')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = T)
+# Packages
+library(data.table)
+library(ape)
+library(ggtree) ## Basic ggplot package for trees
+library(ggtreeExtra) ## For fancy tree plotting
+library(ufs) ## For ggqq plot
+library(phylolm)
+library(rr2)
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(phylopath)
+library(phytools)
+theme_set(theme_minimal())
+library(kableExtra)
+library(stringr)
+# global plotting options for histogram
+xmin= -7.5
+xmax= 0
+```
+
+Initial comments:
+
+Read in the ant data and prepare the variables for path analysis. There are 474 species (116 Tropical, 190 for Temperate and 168 for 'Both') for which data is available for colony size and climatic variables, excluding special ants. 
+```{r Read in ant data for both tropical and other}
+ant_data_tropical<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Tropical_ant_data.csv")
+ant_data_temperate<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Temperate_ant_data_230804.csv")
+ant_data_both<- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/Tropical_vs_temperate/Both_ant_data_230804.csv")
+
+#Assign rownames as species names
+rownames(ant_data_tropical) <- ant_data_tropical$valid_species_name
+rownames(ant_data_temperate) <- ant_data_temperate$valid_species_name
+rownames(ant_data_both) <- ant_data_both$valid_species_name
+
+#Log transform colony size variable
+ant_data_tropical$colony.size.y <- log10(ant_data_tropical$colony.size.y)
+ant_data_temperate$colony.size.y <- log10(ant_data_temperate$colony.size.y)
+ant_data_both$colony.size.y <- log10(ant_data_both$colony.size.y)
+
+#Assign Poly_id as a factor
+ant_data_tropical$poly_id <- as.factor(ant_data_tropical$poly_id)
+ant_data_temperate$poly_id <- as.factor(ant_data_temperate$poly_id)
+ant_data_both$poly_id <- as.factor(ant_data_both$poly_id)
+
+#Read in trees
+##Tropical species trees
+tropical_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_tropical_pruned_MCC.tre")
+tropical_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_tropical_pruned_MCC.tre")
+tropical_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_tropical_pruned_MCC.tre")
+tropical_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_tropical_pruned_MCC.tre")
+
+##Temperate species trees
+temperate_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_temperate_pruned_MCC.tre")
+temperate_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_temperate_pruned_MCC.tre")
+temperate_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_temperate_pruned_MCC.tre")
+temperate_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_temperate_pruned_MCC.tre")
+
+##Both species trees
+both_anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_stem_both_pruned_MCC.tre")
+both_anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/NCuniform_crown_both_pruned_MCC.tre")
+both_anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_stem_both_pruned_MCC.tre")
+both_anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/Tropical_vs_temperate/MCC_trees/FBD_crown_both_pruned_MCC.tre")
+
+#Select columns of interest
+##Tropical - PREavg and TMPavg
+ant_data_tropical_PREavg_selected <- ant_data_tropical %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PREavg_avg)
+ant_data_tropical_TMPavg_selected <- ant_data_tropical %>% dplyr::select(valid_species_name, poly_id, colony.size.y, TMPavg_avg)
+
+
+##Temperate - PREavg and TMPavg
+ant_data_temperate_PREavg_selected <- ant_data_temperate %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PREavg_avg)
+ant_data_temperate_TMPavg_selected <- ant_data_temperate %>% dplyr::select(valid_species_name, poly_id, colony.size.y, TMPavg_avg)
+
+##Both - PREavg and TMPavg
+ant_data_both_PREavg_selected <- ant_data_both %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PREavg_avg)
+ant_data_both_TMPavg_selected <- ant_data_both %>% dplyr::select(valid_species_name, poly_id, colony.size.y, TMPavg_avg)
+
+#Rename the variables used in the analysis
+##Tropical - PREavg and TMPavg
+ant_data_tropical_PREavg_selected_named <- ant_data_tropical_PREavg_selected %>% 
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         PREavg=PREavg_avg)
+ant_data_tropical_TMPavg_selected_named <- ant_data_tropical_TMPavg_selected %>% 
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         TMPavg=TMPavg_avg)
+
+##Temperate - PREavg and TMPavg
+ant_data_temperate_PREavg_selected_named <- ant_data_temperate_PREavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         PREavg=PREavg_avg)
+ant_data_temperate_TMPavg_selected_named <- ant_data_temperate_TMPavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         TMPavg=TMPavg_avg)
+
+##Both - PREavg and TMPavg
+ant_data_both_PREavg_selected_named <- ant_data_both_PREavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         PREavg=PREavg_avg)
+ant_data_both_TMPavg_selected_named <- ant_data_both_TMPavg_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         TMPavg=TMPavg_avg)
+```
+
+When more than on climatic variable is present in the best model (based on AIC model selection), we divide the path analysis into multiple different analyses. This is because path analysis would not accept having more than one climatic predictor in the analysis because the linear models produced had highly significant relationships between the multiple climatic predictors being analysed. The potential model set is reduced to just four models for each analysis, based on all of the possible models given that colony size has a direct effect on the number of worker castes.
+
+# Summary
+
+## PRE
+- Path analysis not necessary for tropical regions as 'phylogeny-only' model is best
+- In temperate regions, greater colony size favours both greater worker size variation and allows invasion into drier regions. Both path coefficients are significant.
+- In species that occur in both regions, greater worker size variation allows invasion into drier regions and drier climates favour greater colony size. However, neither of these paths are significant.
+
+## TMP
+- No significant paths between TMP and either colony size or variation in worker size.
+
+# PRE
+
+## Tropical
+### Alternative causal models
+```{r Tropical - Define the potential causal models PREavg, fig.width=8, fig.height=4}
+### The final set of path models ###
+#Define the models for the analysis: response before the ~, effector after the ~
+
+tropical_PREavg_models <- define_model_set(
+  one = c(Poly_id ~ PREavg, Poly_id ~ Colony_size),
+  two = c(PREavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ PREavg, Poly_id ~ Colony_size),
+  four = c(PREavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PREavg model set - 4 models
+plot_model_set(tropical_PREavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+```
+
+### Path analysis
+```{r Tropical - Analyse models PREavg, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees (changing model of evolution does have effect on outcome, even though phyloglm doesn't have a 'method' option, while phylolm does)
+tropical_PREavg_result_NCuniform_stem <- phylo_path(tropical_PREavg_models, data = ant_data_tropical_PREavg_selected_named, tree = tropical_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+# test <- phylolm(Colony_size ~ PREavg, data = ant_data_tropical_PREavg_selected_named, phy = tropical_anttree_NCuniform_stem, model = "lambda")
+# summary(test)
+tropical_PREavg_result_NCuniform_crown <- phylo_path(tropical_PREavg_models, data = ant_data_tropical_PREavg_selected_named, tree = tropical_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+tropical_PREavg_result_FBD_stem <- phylo_path(tropical_PREavg_models, data = ant_data_tropical_PREavg_selected_named, tree = tropical_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+tropical_PREavg_result_FBD_crown <- phylo_path(tropical_PREavg_models, data = ant_data_tropical_PREavg_selected_named, tree = tropical_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+
+#Summarise the models
+tropical_PREavg_result_NCuniform_stem_summary <- tropical_PREavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_PREavg_result_NCuniform_stem_summary) <- NULL
+
+tropical_PREavg_result_NCuniform_crown_summary <- tropical_PREavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_PREavg_result_NCuniform_crown_summary) <- NULL
+
+tropical_PREavg_result_FBD_stem_summary <- tropical_PREavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_PREavg_result_FBD_stem_summary) <- NULL
+
+tropical_PREavg_result_FBD_crown_summary <- tropical_PREavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_PREavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(tropical_PREavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(tropical_PREavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(tropical_PREavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(tropical_PREavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+#Plot model summaries
+# plot(summary(tropical_PREavg_result_NCuniform_stem))
+# plot(summary(tropical_PREavg_result_NCuniform_crown))
+# plot(summary(tropical_PREavg_result_FBD_stem))
+# plot(summary(tropical_PREavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage 
+tropical_PREavg_average_model_full_NCuniform_stem <- average(tropical_PREavg_result_NCuniform_stem, avg_method = "full")
+tropical_PREavg_average_model_full_NCuniform_crown <- average(tropical_PREavg_result_NCuniform_crown, avg_method = "full")
+tropical_PREavg_average_model_full_FBD_stem <- average(tropical_PREavg_result_FBD_stem, avg_method = "full")
+tropical_PREavg_average_model_full_FBD_crown <- average(tropical_PREavg_result_FBD_crown, avg_method = "full")
+
+# PREavg_average_model <- average(PREavg_result, avg_method = 'conditional') #no 'shrinkage'
+plot(tropical_PREavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_PREavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_PREavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_PREavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+#### Estimate confidence intervals for path coefficients
+```{r Tropical - PRE path coefficients CI, fig.width=14, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# tropical_PREavg_CI_four_NCuniform_stem <- choice(tropical_PREavg_result_NCuniform_stem, "four", boot = 500)
+# 
+# ##NCuniform_crown
+# tropical_PREavg_CI_four_NCuniform_crown <- choice(tropical_PREavg_result_NCuniform_crown, "four", boot = 500)
+# 
+# ##FBD_stem
+# tropical_PREavg_CI_four_FBD_stem <- choice(tropical_PREavg_result_FBD_stem, "four", boot = 500)
+# 
+# ##FBD_crown
+# tropical_PREavg_CI_four_FBD_crown <- choice(tropical_PREavg_result_FBD_crown, "four", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# tropical_PREavg_CI_four_NCuniform_stem
+
+###Averaged model
+coef_plot(tropical_PREavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# tropical_PREavg_CI_four_NCuniform_crown
+
+###Averaged model
+coef_plot(tropical_PREavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# temperate_PREavg_CI_four_FBD_stem
+###Averaged model
+coef_plot(tropical_PREavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# tropical_PREavg_CI_four_FBD_crown
+
+###Averaged model
+coef_plot(tropical_PREavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+
+## Temperate
+
+### Alternative causal models
+```{r Temperate - Define the potential causal models PREavg, fig.width=10, fig.height=6}
+temperate_PREavg_models <- define_model_set(
+  one = c(Poly_id ~ PREavg, Poly_id ~ Colony_size),
+  two = c(PREavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ PREavg, Poly_id ~ Colony_size),
+  four = c(PREavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PRE model set - 4 models
+plot_model_set(temperate_PREavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+```{r Temperate - Analyse models PREavg, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees
+temperate_PREavg_result_NCuniform_stem <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+temperate_PREavg_result_NCuniform_crown  <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+temperate_PREavg_result_FBD_stem <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+temperate_PREavg_result_FBD_crown <- phylo_path(temperate_PREavg_models, data = ant_data_temperate_PREavg_selected_named, tree = temperate_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+
+
+#Summarise the models
+temperate_PREavg_result_NCuniform_stem_summary <- temperate_PREavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_PREavg_result_NCuniform_stem_summary) <- NULL
+
+temperate_PREavg_result_NCuniform_crown_summary <- temperate_PREavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_PREavg_result_NCuniform_crown_summary) <- NULL
+
+temperate_PREavg_result_FBD_stem_summary <- temperate_PREavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_PREavg_result_FBD_stem_summary) <- NULL
+
+temperate_PREavg_result_FBD_crown_summary <- temperate_PREavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_PREavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(temperate_PREavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(temperate_PREavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(temperate_PREavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(temperate_PREavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+# #Plot model summaries
+# plot(summary(temperate_PREavg_result_NCuniform_stem))
+# plot(summary(temperate_PREavg_result_NCuniform_crown))
+# plot(summary(temperate_PREavg_result_FBD_stem))
+# plot(summary(temperate_PREavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+temperate_PREavg_average_model_full_NCuniform_stem <- average(temperate_PREavg_result_NCuniform_stem, avg_method = "full")
+temperate_PREavg_average_model_full_NCuniform_crown <- average(temperate_PREavg_result_NCuniform_crown, avg_method = "full")
+temperate_PREavg_average_model_full_FBD_stem <- average(temperate_PREavg_result_FBD_stem, avg_method = "full")
+temperate_PREavg_average_model_full_FBD_crown <- average(temperate_PREavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(temperate_PREavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_PREavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+#### Estimate confidence intervals for path coefficients
+```{r Temperate - PRE path coefficients CI, fig.width=14, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# temperate_PREavg_CI_four_NCuniform_stem <- choice(temperate_PREavg_result_NCuniform_stem, "four", boot = 500)
+# 
+# ##NCuniform_crown
+# temperate_PREavg_CI_four_NCuniform_crown <- choice(temperate_PREavg_result_NCuniform_crown, "four", boot = 500)
+# 
+# ##FBD_stem
+# temperate_PREavg_CI_four_FBD_stem <- choice(temperate_PREavg_result_FBD_stem, "four", boot = 500)
+# 
+# ##FBD_crown
+# temperate_PREavg_CI_four_FBD_crown <- choice(temperate_PREavg_result_FBD_crown, "four", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# temperate_PREavg_CI_four_NCuniform_stem
+
+###Averaged model
+coef_plot(temperate_PREavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# temperate_PREavg_CI_four_NCuniform_crown
+
+###Averaged model
+coef_plot(temperate_PREavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# temperate_PREavg_CI_four_FBD_stem
+###Averaged model
+coef_plot(temperate_PREavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# temperate_PREavg_CI_four_FBD_crown
+
+###Averaged model
+coef_plot(temperate_PREavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+## Both
+
+### Alternative causal models
+```{r Both - Define the potential causal models PREavg, fig.width=10, fig.height=6}
+both_PREavg_models <- define_model_set(
+  one = c(Poly_id ~ PREavg, Poly_id ~ Colony_size),
+  two = c(PREavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ PREavg, Poly_id ~ Colony_size),
+  four = c(PREavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PRE model set - 4 models
+plot_model_set(both_PREavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+
+```{r Both - Analyse models PREavg, fig.width=14, fig.height=6}
+#Run the models on each of the 4 different MCC trees
+both_PREavg_result_NCuniform_stem <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_PREavg_result_NCuniform_crown  <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_PREavg_result_FBD_stem <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_PREavg_result_FBD_crown <- phylo_path(both_PREavg_models, data = ant_data_both_PREavg_selected_named, tree = both_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+
+
+#Summarise the models
+both_PREavg_result_NCuniform_stem_summary <- both_PREavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_PREavg_result_NCuniform_stem_summary) <- NULL
+
+both_PREavg_result_NCuniform_crown_summary <- both_PREavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_PREavg_result_NCuniform_crown_summary) <- NULL
+
+both_PREavg_result_FBD_stem_summary <- both_PREavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_PREavg_result_FBD_stem_summary) <- NULL
+
+both_PREavg_result_FBD_crown_summary <- both_PREavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_PREavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(both_PREavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(both_PREavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(both_PREavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(both_PREavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+# #Plot model summaries
+# plot(summary(both_PREavg_result_NCuniform_stem))
+# plot(summary(both_PREavg_result_NCuniform_crown))
+# plot(summary(both_PREavg_result_FBD_stem))
+# plot(summary(both_PREavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+both_PREavg_average_model_full_NCuniform_stem <- average(both_PREavg_result_NCuniform_stem, avg_method = "full")
+both_PREavg_average_model_full_NCuniform_crown <- average(both_PREavg_result_NCuniform_crown, avg_method = "full")
+both_PREavg_average_model_full_FBD_stem <- average(both_PREavg_result_FBD_stem, avg_method = "full")
+both_PREavg_average_model_full_FBD_crown <- average(both_PREavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(both_PREavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_PREavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+#### Estimate confidence intervals for path coefficients
+```{r Both - PRE path coefficients CI, fig.width=19, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# both_PREavg_CI_three_NCuniform_stem <- choice(both_PREavg_result_NCuniform_stem, "three", boot = 500)
+# both_PREavg_CI_two_NCuniform_stem <- choice(both_PREavg_result_NCuniform_stem, "two", boot = 500)
+# 
+# ##NCuniform_crown
+# both_PREavg_CI_three_NCuniform_crown <- choice(both_PREavg_result_NCuniform_crown, "three", boot = 500)
+# both_PREavg_CI_two_NCuniform_crown <- choice(both_PREavg_result_NCuniform_crown, "two", boot = 500)
+# 
+# ##FBD_stem
+# both_PREavg_CI_three_FBD_stem <- choice(both_PREavg_result_FBD_stem, "three", boot = 500)
+# both_PREavg_CI_two_FBD_stem <- choice(both_PREavg_result_FBD_stem, "two", boot = 500)
+# 
+# ##FBD_crown
+# both_PREavg_CI_three_FBD_crown <- choice(both_PREavg_result_FBD_crown, "three", boot = 500)
+# both_PREavg_CI_two_FBD_crown <- choice(both_PREavg_result_FBD_crown, "two", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# both_PREavg_CI_three_NCuniform_stem
+# both_PREavg_CI_two_NCuniform_stem
+
+###Averaged model
+coef_plot(both_PREavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# both_PREavg_CI_three_NCuniform_crown
+# both_PREavg_CI_two_NCuniform_crown
+###Averaged model
+coef_plot(both_PREavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# both_PREavg_CI_three_FBD_stem
+# both_PREavg_CI_two_FBD_stem
+###Averaged model
+coef_plot(both_PREavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# both_PREavg_CI_three_FBD_crown
+# both_PREavg_CI_two_FBD_crown
+###Averaged model
+coef_plot(both_PREavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+# TMP
+
+## Tropical
+
+### Alternative causal models
+```{r Tropical - Define the potential causal models TMPavg, fig.width=10, fig.height=6}
+tropical_TMPavg_models <- define_model_set(
+  one = c(Poly_id ~ TMPavg, Poly_id ~ Colony_size),
+  two = c(TMPavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ TMPavg, Poly_id ~ Colony_size),
+  four = c(TMPavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#TMP model set - 4 models
+plot_model_set(tropical_TMPavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+### Path analysis
+```{r Tropical - Analyse models TMPavg, fig.width=14, fig.height=5}
+#Run the models on each of the 4 different MCC trees
+tropical_TMPavg_result_NCuniform_stem <- phylo_path(tropical_TMPavg_models, data = ant_data_tropical_TMPavg_selected_named, tree = tropical_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+tropical_TMPavg_result_NCuniform_crown  <- phylo_path(tropical_TMPavg_models, data = ant_data_tropical_TMPavg_selected_named, tree = tropical_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+tropical_TMPavg_result_FBD_stem <- phylo_path(tropical_TMPavg_models, data = ant_data_tropical_TMPavg_selected_named, tree = tropical_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+tropical_TMPavg_result_FBD_crown <- phylo_path(tropical_TMPavg_models, data = ant_data_tropical_TMPavg_selected_named, tree = tropical_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+
+
+#Summarise the models
+tropical_TMPavg_result_NCuniform_stem_summary <- tropical_TMPavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_TMPavg_result_NCuniform_stem_summary) <- NULL
+
+tropical_TMPavg_result_NCuniform_crown_summary <- tropical_TMPavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_TMPavg_result_NCuniform_crown_summary) <- NULL
+
+tropical_TMPavg_result_FBD_stem_summary <- tropical_TMPavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_TMPavg_result_FBD_stem_summary) <- NULL
+
+tropical_TMPavg_result_FBD_crown_summary <- tropical_TMPavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(tropical_TMPavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(tropical_TMPavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(tropical_TMPavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(tropical_TMPavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(tropical_TMPavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+# #Plot model summaries
+# plot(summary(temperate_TMPavg_result_NCuniform_stem))
+# plot(summary(temperate_TMPavg_result_NCuniform_crown))
+# plot(summary(temperate_TMPavg_result_FBD_stem))
+# plot(summary(temperate_TMPavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+tropical_TMPavg_average_model_full_NCuniform_stem <- average(tropical_TMPavg_result_NCuniform_stem, avg_method = "full")
+tropical_TMPavg_average_model_full_NCuniform_crown <- average(tropical_TMPavg_result_NCuniform_crown, avg_method = "full")
+tropical_TMPavg_average_model_full_FBD_stem <- average(tropical_TMPavg_result_FBD_stem, avg_method = "full")
+tropical_TMPavg_average_model_full_FBD_crown <- average(tropical_TMPavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(tropical_TMPavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(tropical_TMPavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+#### Estimate confidence intervals for path coefficients
+```{r Tropical - TMP path coefficients CI, fig.width=14, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# tropical_TMPavg_CI_one_NCuniform_stem <- choice(tropical_TMPavg_result_NCuniform_stem, "one", boot = 500)
+# 
+# ##NCuniform_crown
+# tropical_TMPavg_CI_one_NCuniform_crown <- choice(tropical_TMPavg_result_NCuniform_crown, "one", boot = 500)
+# 
+# ##FBD_stem
+# tropical_TMPavg_CI_one_FBD_stem <- choice(tropical_TMPavg_result_FBD_stem, "one", boot = 500)
+# 
+# ##FBD_crown
+# tropical_TMPavg_CI_one_FBD_crown <- choice(tropical_TMPavg_result_FBD_crown, "one", boot = 500)
+# tropical_TMPavg_CI_three_FBD_crown <- choice(tropical_TMPavg_result_FBD_crown, "three", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# tropical_TMPavg_CI_one_NCuniform_stem
+
+###Averaged model
+coef_plot(tropical_TMPavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# tropical_TMPavg_CI_one_NCuniform_crown
+###Averaged model
+coef_plot(tropical_TMPavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# tropical_TMPavg_CI_one_FBD_stem
+###Averaged model
+coef_plot(tropical_TMPavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# tropical_TMPavg_CI_one_FBD_crown
+# tropical_TMPavg_CI_three_FBD_crown
+
+###Averaged model
+coef_plot(tropical_TMPavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+## Temperate
+
+### Alternative causal models
+```{r Temperate - Define the potential causal models TMPavg, fig.width=10, fig.height=6}
+temperate_TMPavg_models <- define_model_set(
+  one = c(Poly_id ~ TMPavg, Poly_id ~ Colony_size),
+  two = c(TMPavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ TMPavg, Poly_id ~ Colony_size),
+  four = c(TMPavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#TMP model set - 4 models
+plot_model_set(temperate_TMPavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+```{r Temperate - Analyse models TMPavg, fig.width=14, fig.height=5}
+#Run the models on each of the 4 different MCC trees
+temperate_TMPavg_result_NCuniform_stem <- phylo_path(temperate_TMPavg_models, data = ant_data_temperate_TMPavg_selected_named, tree = temperate_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE", btol = 20)
+temperate_TMPavg_result_NCuniform_crown  <- phylo_path(temperate_TMPavg_models, data = ant_data_temperate_TMPavg_selected_named, tree = temperate_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE", btol = 10)
+temperate_TMPavg_result_FBD_stem <- phylo_path(temperate_TMPavg_models, data = ant_data_temperate_TMPavg_selected_named, tree = temperate_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE", btol = 20)
+temperate_TMPavg_result_FBD_crown <- phylo_path(temperate_TMPavg_models, data = ant_data_temperate_TMPavg_selected_named, tree = temperate_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE", btol = 20)
+
+
+#Summarise the models
+temperate_TMPavg_result_NCuniform_stem_summary <- temperate_TMPavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_TMPavg_result_NCuniform_stem_summary) <- NULL
+
+temperate_TMPavg_result_NCuniform_crown_summary <- temperate_TMPavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_TMPavg_result_NCuniform_crown_summary) <- NULL
+
+temperate_TMPavg_result_FBD_stem_summary <- temperate_TMPavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_TMPavg_result_FBD_stem_summary) <- NULL
+
+temperate_TMPavg_result_FBD_crown_summary <- temperate_TMPavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(temperate_TMPavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(temperate_TMPavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(temperate_TMPavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(temperate_TMPavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(temperate_TMPavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+# #Plot model summaries
+# plot(summary(temperate_TMPavg_result_NCuniform_stem))
+# plot(summary(temperate_TMPavg_result_NCuniform_crown))
+# plot(summary(temperate_TMPavg_result_FBD_stem))
+# plot(summary(temperate_TMPavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+temperate_TMPavg_average_model_full_NCuniform_stem <- average(temperate_TMPavg_result_NCuniform_stem, avg_method = "full")
+temperate_TMPavg_average_model_full_NCuniform_crown <- average(temperate_TMPavg_result_NCuniform_crown, avg_method = "full")
+temperate_TMPavg_average_model_full_FBD_stem <- average(temperate_TMPavg_result_FBD_stem, avg_method = "full")
+temperate_TMPavg_average_model_full_FBD_crown <- average(temperate_TMPavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(temperate_TMPavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_TMPavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_TMPavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(temperate_TMPavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+#### Estimate confidence intervals for path coefficients
+```{r Temperate - TMP path coefficients CI, fig.width=14, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# temperate_TMPavg_CI_one_NCuniform_stem <- choice(temperate_TMPavg_result_NCuniform_stem, "one", boot = 500)
+# 
+# ##NCuniform_crown
+# temperate_TMPavg_CI_one_NCuniform_crown <- choice(temperate_TMPavg_result_NCuniform_crown, "one", boot = 500)
+# 
+# ##FBD_stem
+# temperate_TMPavg_CI_one_FBD_stem <- choice(temperate_TMPavg_result_FBD_stem, "one", boot = 500)
+# 
+# ##FBD_crown
+# temperate_TMPavg_CI_one_FBD_crown <- choice(temperate_TMPavg_result_FBD_crown, "one", boot = 500)
+# temperate_TMPavg_CI_three_FBD_crown <- choice(temperate_TMPavg_result_FBD_crown, "three", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# temperate_TMPavg_CI_one_NCuniform_stem
+
+###Averaged model
+coef_plot(temperate_TMPavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# temperate_TMPavg_CI_one_NCuniform_crown
+###Averaged model
+coef_plot(temperate_TMPavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# temperate_TMPavg_CI_one_FBD_stem
+###Averaged model
+coef_plot(temperate_TMPavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# temperate_TMPavg_CI_one_FBD_crown
+# temperate_TMPavg_CI_three_FBD_crown
+
+###Averaged model
+coef_plot(temperate_TMPavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+## Both
+
+### Alternative causal models
+```{r Both - Define the potential causal models TMPavg, fig.width=10, fig.height=6}
+both_TMPavg_models <- define_model_set(
+  one = c(Poly_id ~ TMPavg, Poly_id ~ Colony_size),
+  two = c(TMPavg ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ TMPavg, Poly_id ~ Colony_size),
+  four = c(TMPavg ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#TMP model set - 4 models
+plot_model_set(both_TMPavg_models, box_x = 22, box_y = 8, text_size = 3.5)
+
+```
+
+### Path analysis
+```{r Both - Analyse models TMPavg, fig.width=24, fig.height=5}
+#Run the models on each of the 4 different MCC trees
+both_TMPavg_result_NCuniform_stem <- phylo_path(both_TMPavg_models, data = ant_data_both_TMPavg_selected_named, tree = both_anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_TMPavg_result_NCuniform_crown  <- phylo_path(both_TMPavg_models, data = ant_data_both_TMPavg_selected_named, tree = both_anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_TMPavg_result_FBD_stem <- phylo_path(both_TMPavg_models, data = ant_data_both_TMPavg_selected_named, tree = both_anttree_FBD_stem, model = "lambda", method = "logistic_MPLE", btol = 30)
+both_TMPavg_result_FBD_crown <- phylo_path(both_TMPavg_models, data = ant_data_both_TMPavg_selected_named, tree = both_anttree_FBD_crown, model = "lambda", method = "logistic_MPLE", btol = 30)
+
+
+#Summarise the models
+both_TMPavg_result_NCuniform_stem_summary <- both_TMPavg_result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_TMPavg_result_NCuniform_stem_summary) <- NULL
+
+both_TMPavg_result_NCuniform_crown_summary <- both_TMPavg_result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_TMPavg_result_NCuniform_crown_summary) <- NULL
+
+both_TMPavg_result_FBD_stem_summary <- both_TMPavg_result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_TMPavg_result_FBD_stem_summary) <- NULL
+
+both_TMPavg_result_FBD_crown_summary <- both_TMPavg_result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc) %>% filter(`CICc difference` <= 2)
+ #k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(both_TMPavg_result_FBD_crown_summary) <- NULL
+
+#Produce tables for Rmarkdown
+kable(both_TMPavg_result_NCuniform_stem_summary, caption = "NCuniform stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position") #The kableExtra chunk of code holds the table in position so that it does not start floating around the document
+kable(both_TMPavg_result_NCuniform_crown_summary, caption = "NCuniform crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(both_TMPavg_result_FBD_stem_summary, caption = "FBD stem path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+kable(both_TMPavg_result_FBD_crown_summary, caption = "FBD crown path analysis model selection summary table") %>%
+  kableExtra::kable_styling(latex_options = "hold_position")
+
+# #Plot model summaries
+# plot(summary(both_TMPavg_result_NCuniform_stem))
+# plot(summary(both_TMPavg_result_NCuniform_crown))
+# plot(summary(both_TMPavg_result_FBD_stem))
+# plot(summary(both_TMPavg_result_FBD_crown))
+
+#Perform model averaging - 'full' allows shrinkage
+both_TMPavg_average_model_full_NCuniform_stem <- average(both_TMPavg_result_NCuniform_stem, avg_method = "full")
+both_TMPavg_average_model_full_NCuniform_crown <- average(both_TMPavg_result_NCuniform_crown, avg_method = "full")
+both_TMPavg_average_model_full_FBD_stem <- average(both_TMPavg_result_FBD_stem, avg_method = "full")
+both_TMPavg_average_model_full_FBD_crown <- average(both_TMPavg_result_FBD_crown, avg_method = "full")
+
+# TMPsd_average_model <- average(TMPsd_result, avg_method = 'conditional') #no 'shrinkage'
+plot(both_TMPavg_average_model_full_NCuniform_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_TMPavg_average_model_full_NCuniform_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_TMPavg_average_model_full_FBD_stem, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+plot(both_TMPavg_average_model_full_FBD_crown, algorithm = 'mds', curvature = 0.1, box_x = 10, box_y = 10, text_size = 5)
+```
+
+#### Estimate confidence intervals for path coefficients
+```{r Both - TMP path coefficients CI, fig.width=19, fig.height=2}
+#Estimate confidence intervals for path coefficients
+##NCuniform_stem
+# both_TMPavg_CI_two_NCuniform_stem <- choice(both_TMPavg_result_NCuniform_stem, "two", boot = 500)
+# both_TMPavg_CI_one_NCuniform_stem <- choice(both_TMPavg_result_NCuniform_stem, "one", boot = 500)
+# 
+# ##NCuniform_crown
+# both_TMPavg_CI_two_NCuniform_crown <- choice(both_TMPavg_result_NCuniform_crown, "two", boot = 500)
+# both_TMPavg_CI_one_NCuniform_crown <- choice(both_TMPavg_result_NCuniform_crown, "one", boot = 500)
+# 
+# ##FBD_stem
+# both_TMPavg_CI_two_FBD_stem <- choice(both_TMPavg_result_FBD_stem, "two", boot = 500)
+# both_TMPavg_CI_one_FBD_stem <- choice(both_TMPavg_result_FBD_stem, "one", boot = 500)
+# 
+# ##FBD_crown
+# both_TMPavg_CI_two_FBD_crown <- choice(both_TMPavg_result_FBD_crown, "two", boot = 500)
+# both_TMPavg_CI_one_FBD_crown <- choice(both_TMPavg_result_FBD_crown, "one", boot = 500)
+
+#Print out the tables and plots
+##NCuniform_stem
+###Individual models
+# both_TMPavg_CI_two_NCuniform_stem
+# both_TMPavg_CI_one_NCuniform_stem
+
+###Averaged model
+coef_plot(both_TMPavg_average_model_full_NCuniform_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##NCuniform_crown
+###Individual models
+# both_TMPavg_CI_two_NCuniform_crown
+# both_TMPavg_CI_one_NCuniform_crown
+###Averaged model
+coef_plot(both_TMPavg_average_model_full_NCuniform_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_stem
+###Individual models
+# both_TMPavg_CI_two_FBD_stem
+# both_TMPavg_CI_one_FBD_stem
+###Averaged model
+coef_plot(both_TMPavg_average_model_full_FBD_stem, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+
+##FBD_crown
+###Individual models
+# both_TMPavg_CI_two_FBD_crown
+# both_TMPavg_CI_one_FBD_crown
+###Averaged model
+coef_plot(both_TMPavg_average_model_full_FBD_crown, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
