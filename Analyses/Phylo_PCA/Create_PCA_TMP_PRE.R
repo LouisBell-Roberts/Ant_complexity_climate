@@ -111,7 +111,7 @@ pca_load_combined <- rename(pca_load_combined, Variable = Predictors)
 pca_load_combined$PC1 <- round(pca_load_combined$PC1, digits = 2)
 pca_load_combined$PC2 <- round(pca_load_combined$PC2, digits = 2)
 
-write.csv(pca_load_combined, file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Wordfiles/Paper drafting/AntEnv/Supplementary_materials/Tables/pca_loadings_combined.csv", row.names = F)
+# write.csv(pca_load_combined, file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Wordfiles/Paper drafting/AntEnv/Supplementary_materials/Tables/pca_loadings_combined.csv", row.names = F)
 
 ## Make the dataset, there is only 2 PCs because of two variables
 
