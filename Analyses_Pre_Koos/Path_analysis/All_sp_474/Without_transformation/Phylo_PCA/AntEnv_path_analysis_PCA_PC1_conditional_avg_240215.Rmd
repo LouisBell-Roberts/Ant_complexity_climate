@@ -1,0 +1,427 @@
+---
+title: "Ant Climate Project"
+subtitle: "Path analysis using PCA - Global using conditional averaging"
+author: "Louis Bell-Roberts"
+output:
+  pdf_document:
+    number_sections: true
+    fig_caption: true
+    includes:  
+      in_header: preamble-latex.tex
+urlcolor: blue
+date: \today
+---
+
+\tableofcontents
+\newpage 
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=F, warning=F, fig.align='center')
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = T)
+# Packages
+library(knitr)
+library(ape)
+library(ggtree) ## Basic ggplot package for trees
+library(ggtreeExtra) ## For fancy tree plotting
+library(ufs) ## For ggqq plot
+library(phylolm)
+library(rr2)
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(phylopath)
+library(phytools)
+theme_set(theme_minimal())
+library(kableExtra)
+library(stringr)
+library(grid)
+library(gridExtra)
+# global plotting options for histogram
+xmin= -7.5
+xmax= 0
+```
+
+
+```{r Read in ant data}
+ant_data_NCuniform_stem <- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/New_transformations/PCA_MCC_trees_data/NCuniform_stem_all_PCA_231116.csv") #474 species
+ant_data_NCuniform_crown <- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/New_transformations/PCA_MCC_trees_data/NCuniform_crown_all_PCA_231116.csv")
+ant_data_FBD_stem <- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/New_transformations/PCA_MCC_trees_data/FBD_stem_all_PCA_231116.csv")
+ant_data_FBD_crown <- read.csv("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Data/CS/New_transformations/PCA_MCC_trees_data/FBD_crown_all_PCA_231116.csv")
+
+#Assign rownames as species names
+rownames(ant_data_NCuniform_stem) <- ant_data_NCuniform_stem$valid_species_name
+rownames(ant_data_NCuniform_crown) <- ant_data_NCuniform_crown$valid_species_name
+rownames(ant_data_FBD_stem) <- ant_data_FBD_stem$valid_species_name
+rownames(ant_data_FBD_crown) <- ant_data_FBD_crown$valid_species_name
+
+#Log transform colony size variable
+ant_data_NCuniform_stem$colony.size.y <- log10(ant_data_NCuniform_stem$colony.size.y)
+ant_data_NCuniform_crown$colony.size.y <- log10(ant_data_NCuniform_crown$colony.size.y)
+ant_data_FBD_stem$colony.size.y <- log10(ant_data_FBD_stem$colony.size.y)
+ant_data_FBD_crown$colony.size.y <- log10(ant_data_FBD_crown$colony.size.y)
+
+#Assign Poly_id as a factor
+ant_data_NCuniform_stem$poly_id <- as.factor(ant_data_NCuniform_stem$poly_id)
+ant_data_NCuniform_crown$poly_id <- as.factor(ant_data_NCuniform_crown$poly_id)
+ant_data_FBD_stem$poly_id <- as.factor(ant_data_FBD_stem$poly_id)
+ant_data_FBD_crown$poly_id <- as.factor(ant_data_FBD_crown$poly_id)
+
+
+#Read in trees
+anttree_NCuniform_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/474_species/MCC_trees/pruned_474_sp_NCuniform_stem_MCC.tre")
+anttree_NCuniform_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/474_species/MCC_trees/pruned_474_sp_NCuniform_crown_MCC.tre")
+anttree_FBD_stem <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/474_species/MCC_trees/pruned_474_sp_FBD_stem_MCC.tre")
+anttree_FBD_crown <- read.tree(file = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Data/Ant_environment/Subsetted/Primary/Trees/CS/474_species/MCC_trees/pruned_474_sp_FBD_crown_MCC.tre")
+
+#Select columns of interest
+anttree_NCuniform_stem_selected <- ant_data_NCuniform_stem %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PC1, PC2)
+anttree_NCuniform_crown_selected <- ant_data_NCuniform_crown %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PC1, PC2)
+anttree_FBD_stem_selected <- ant_data_FBD_stem %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PC1, PC2)
+anttree_FBD_crown_selected <- ant_data_FBD_crown %>% dplyr::select(valid_species_name, poly_id, colony.size.y, PC1, PC2)
+
+
+#Rename the variables used in the analysis
+anttree_NCuniform_stem_selected_named <- anttree_NCuniform_stem_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         Climate1=PC1,
+         Climate2=PC2)
+
+anttree_NCuniform_crown_selected_named <- anttree_NCuniform_crown_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         Climate1=PC1,
+         Climate2=PC2)
+
+anttree_FBD_stem_selected_named <- anttree_FBD_stem_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         Climate1=PC1,
+         Climate2=PC2)
+
+anttree_FBD_crown_selected_named <- anttree_FBD_crown_selected %>%
+  rename(Colony_size=colony.size.y,
+         Poly_id=poly_id,
+         Climate1=PC1,
+         Climate2=PC2)
+
+```
+
+# Initial comments
+
+- Read in the ant data and prepare the variables for path analysis. There are 474 species for which data is available for colony size and climatic variables, excluding special ants. Process repeated on the 4 different PCA datasets created using the 4 different MCC trees.
+
+- We use PCA for phylogenetic path analysis as path analysis with both temperature and rainfall variables in the same models were always rejected, unless causal paths were drawn between climatic variables. This is likely because of the correlation between climatic variables. Path analaysis with PCA allows us to analyse both temperature and rainfall in the same causal models.
+
+- The potential model set is reduced to just four models for each analysis, assuming that colony size has a direct effect on the number of worker castes (Bell-Roberts et al., 2023).
+
+# Summary
+- Model 3 (climate affects colony size) most often comes out as the best model across trees. But there is no real pattern of any strong effect of climate and social complexity. Results also quite sensitive to phylogenetic uncertainty.
+
+# Create alternative causal models
+```{r Define the potential causal models, fig.width=10, fig.height=6}
+models <- define_model_set(
+  one = c(Poly_id ~ Climate1, Poly_id ~ Colony_size),
+  two = c(Climate1 ~ Poly_id, Poly_id ~ Colony_size),
+  three = c(Colony_size ~ Climate1, Poly_id ~ Colony_size),
+  four = c(Climate1 ~ Colony_size, Poly_id ~ Colony_size)
+)
+
+#PRE model set - 4 models
+(potential_causal_models <- plot_model_set(models, box_x = 22, box_y = 8, text_size = 3.5))
+# ggsave(plot = potential_causal_models, filename = "/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Wordfiles/Paper drafting/AntEnv/Supplementary_materials/Figures/Potential_causal_models.pdf")
+
+```
+
+# Path analysis
+## NCuniform stem tree
+Factor loading PC1: TMP: negative; PRE: negative
+```{r Analyse models NCuniform stem, fig.width=7, fig.height=4}
+#Run the models on each of the 4 different MCC trees
+anttree_NCuniform_stem_selected_named$Climate1 <- -anttree_NCuniform_stem_selected_named$Climate1 #Reverse sign for each of the relationships with Climate
+result_NCuniform_stem <- phylo_path(models, data = anttree_NCuniform_stem_selected_named, tree = anttree_NCuniform_stem, model = "lambda", method = "logistic_MPLE")
+# result_NCuniform_stem$warnings
+plot(summary(result_NCuniform_stem))
+result_NCuniform_stem_average_conditional <- average(result_NCuniform_stem, avg_method = "conditional")
+(result_NCuniform_stem_average_conditional_plot <- plot(result_NCuniform_stem_average_conditional, algorithm = 'sugiyama', curvature = 0.04, box_x = 20, box_y = 12, text_size = 5, labels = c(Colony_size = "CS",  Poly_id = "WP", Climate1 = "PC1"))
+)
+
+#CI
+coef_plot(result_NCuniform_stem_average_conditional, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+## NCuniform crown tree
+Factor loading PC1: TMP: positive; PRE: positive
+```{r Analyse models NCuniform crown, fig.width=7, fig.height=4}
+#Run the models on each of the 4 different MCC trees
+result_NCuniform_crown <- phylo_path(models, data = anttree_NCuniform_crown_selected_named, tree = anttree_NCuniform_crown, model = "lambda", method = "logistic_MPLE")
+# result_NCuniform_crown$warnings
+plot(summary(result_NCuniform_crown))
+result_NCuniform_crown_average_conditional <- average(result_NCuniform_crown, avg_method = "conditional")
+(result_NCuniform_crown_average_conditional_plot <- plot(result_NCuniform_crown_average_conditional, algorithm = 'sugiyama', curvature = 0.04, box_x = 20, box_y = 12, text_size = 5, labels = c(Colony_size = "CS",  Poly_id = "WP", Climate1 = "PC1"))
+)
+
+#CI
+coef_plot(result_NCuniform_crown_average_conditional, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+
+## FBD stem tree
+Factor loading PC1: TMP: negative; PRE: negative
+```{r Analyse models FBD stem, fig.width=8, fig.height=4}
+#Run the models on each of the 4 different MCC trees
+anttree_FBD_stem_selected_named$Climate1 <- -anttree_FBD_stem_selected_named$Climate1 #Reverse sign for each of the relationships with Climate
+result_FBD_stem <- phylo_path(models, data = anttree_FBD_stem_selected_named, tree = anttree_FBD_stem, model = "lambda", method = "logistic_MPLE")
+# result_FBD_stem$warnings
+plot(summary(result_FBD_stem))
+result_FBD_stem_average_conditional <- average(result_FBD_stem, avg_method = "conditional")
+(result_FBD_stem_average_conditional_plot <- plot(result_FBD_stem_average_conditional, algorithm = 'sugiyama', curvature = 0.04, box_x = 20, box_y = 12, text_size = 5, labels = c(Colony_size = "CS",  Poly_id = "WP", Climate1 = "PC1"))
+)
+
+#CI
+coef_plot(result_FBD_stem_average_conditional, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+## FBD crown tree
+Factor loading PC1: TMP: negative; PRE: negative
+```{r Analyse models FBD crown, fig.width=11, fig.height=4}
+#Run the models on each of the 4 different MCC trees
+anttree_FBD_crown_selected_named$Climate1 <- -anttree_FBD_crown_selected_named$Climate1 #Reverse sign for each of the relationships with Climate
+result_FBD_crown <- phylo_path(models, data = anttree_FBD_crown_selected_named, tree = anttree_FBD_crown, model = "lambda", method = "logistic_MPLE")
+# result_FBD_crown$warnings
+plot(summary(result_FBD_crown))
+result_FBD_crown_average_conditional <- average(result_FBD_crown, avg_method = "conditional")
+(result_FBD_crown_average_conditional_plot <- plot(result_FBD_crown_average_conditional, algorithm = 'sugiyama', curvature = 0.04, box_x = 20, box_y = 12, text_size = 5, labels = c(Colony_size = "CS",  Poly_id = "WP", Climate1 = "PC1"))
+)
+
+#CI
+coef_plot(result_FBD_crown_average_conditional, error_bar = "ci", reverse_order = TRUE) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw(base_size = 17)
+```
+# Panel plots
+```{r Panel plots, fig.width=22, fig.height=8}
+# Create a PDF file
+pdf("/Users/louis.bell-roberts/Documents/DTP_1st_project_rotation/Wordfiles/Paper drafting/AntEnv/Supplementary_materials/Figures/Path_analysis_global_PCA_average_4panel_conditional_avg.pdf", width = 11, height = 13)
+
+#Make multipanel plot
+Path_analysis_global_PCA_average_4panel.pdf <- grid.arrange(result_NCuniform_stem_average_conditional_plot, result_NCuniform_crown_average_conditional_plot, result_FBD_stem_average_conditional_plot, result_FBD_crown_average_conditional_plot, ncol = 1)
+
+# Add labels to each panel
+grid.text("a", x = 0.01, y = 0.96, just = "left", gp = gpar(fontsize = 16, fontface = "bold"), vp = Path_analysis_global_PCA_average_4panel.pdf$layout$layout[1, 1]$panel_params)
+grid.text("b", x = 0.01, y = 0.71, just = "left", gp = gpar(fontsize = 16, fontface = "bold"), vp = Path_analysis_global_PCA_average_4panel.pdf$layout$layout[1, 2]$panel_params)
+grid.text("c", x = 0.01, y = 0.46, just = "left", gp = gpar(fontsize = 16, fontface = "bold"), vp = Path_analysis_global_PCA_average_4panel.pdf$layout$layout[2, 1]$panel_params)
+grid.text("d", x = 0.01, y = 0.21, just = "left", gp = gpar(fontsize = 16, fontface = "bold"), vp = Path_analysis_global_PCA_average_4panel.pdf$layout$layout[2, 2]$panel_params)
+
+dev.off()
+
+plot(Path_analysis_global_PCA_average_4panel.pdf)
+```
+
+
+```{r Summarise the models}
+
+#NCuniform_stem
+NCuniform_stem_summary <- result_NCuniform_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc)
+#k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(NCuniform_stem_summary) <- NULL
+NCuniform_stem_summary <- NCuniform_stem_summary %>%
+  mutate(phylogeny = "NC uniform stem") %>%
+  select(phylogeny, everything())
+
+#NCuniform_crown
+NCuniform_crown_summary <- result_NCuniform_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc)
+#k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(NCuniform_crown_summary) <- NULL
+NCuniform_crown_summary <- NCuniform_crown_summary %>%
+  mutate(phylogeny = "NC uniform crown") %>%
+  select(phylogeny, everything())
+
+#FBD_stem
+FBD_stem_summary <- result_FBD_stem %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc)
+#k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(FBD_stem_summary) <- NULL
+FBD_stem_summary <- FBD_stem_summary %>%
+  mutate(phylogeny = "FBD stem") %>%
+  select(phylogeny, everything())
+
+#FBD_crown
+FBD_crown_summary <- result_FBD_crown %>% summary() %>% as.data.frame() %>% select(2:9) %>% round(digits = 2) %>% mutate(model = row.names(.)) %>% select(model, everything()) %>% rename("CICc difference" = delta_CICc)
+#k=number of conditional independencies tested; q=number of parameters estimated; l=likelihood; w=CICc weight
+rownames(FBD_crown_summary) <- NULL
+FBD_crown_summary <- FBD_crown_summary %>%
+  mutate(phylogeny = "FBD crown") %>%
+  select(phylogeny, everything())
+
+##Combine the four data frames
+combined_summaries <- rbind(NCuniform_stem_summary, NCuniform_crown_summary, FBD_stem_summary, FBD_crown_summary)
+write.csv(combined_summaries, file = "/Users/louis.bell-roberts/Documents/Github/Division-of-labour/Phylogenetic_analysis/Ant_environmental_data/Analyses/Path_analysis/All_sp_474/Without_transformation/Phylo_PCA/Results/Path_analysis_Global_summary_conditional_avg.csv", row.names = FALSE)
+
+
+######################################################################
+#Function for extracting Path coefficient, SE, and 95% confidence interval from the Bootstrapped model results
+generate_stats <- function(result, value, MCC) {
+  CS_WP <- c(round(result$coef["Colony_size", "Poly_id"], 2), 
+             round(result$se["Colony_size", "Poly_id"], 2), 
+             round(result$lower["Colony_size", "Poly_id"], 2), 
+             round(result$upper["Colony_size", "Poly_id"], 2))
+  
+  Climate_WP <- c(round(result$coef["Climate1", "Poly_id"], 2), 
+             round(result$se["Climate1", "Poly_id"], 2), 
+             round(result$lower["Climate1", "Poly_id"], 2), 
+             round(result$upper["Climate1", "Poly_id"], 2))
+  
+  WP_Climate <- c(round(result$coef["Poly_id", "Climate1"], 2), 
+             round(result$se["Poly_id", "Climate1"], 2), 
+             round(result$lower["Poly_id", "Climate1"], 2), 
+             round(result$upper["Poly_id", "Climate1"], 2))
+  
+  CS_Climate <- c(round(result$coef["Colony_size", "Climate1"], 2), 
+             round(result$se["Colony_size", "Climate1"], 2), 
+             round(result$lower["Colony_size", "Climate1"], 2), 
+             round(result$upper["Colony_size", "Climate1"], 2))
+  
+  Climate_CS <- c(round(result$coef["Climate1", "Colony_size"], 2), 
+             round(result$se["Climate1", "Colony_size"], 2), 
+             round(result$lower["Climate1", "Colony_size"], 2), 
+             round(result$upper["Climate1", "Colony_size"], 2))
+    
+  stats_noname <- as.data.frame(t(data.frame(CS_affects_WP = CS_WP, 
+                                             Climate_affects_WP = Climate_WP, 
+                                             WP_affects_Climate = WP_Climate, 
+                                             CS_affects_Climate = CS_Climate,
+                                             Climate_affects_CS = Climate_CS)))
+  
+  stats <- rename(stats_noname, 
+                                 Path_coefficient = V1, 
+                                 SE = V2, 
+                                 Lower_95_CI = V3, 
+                                 Upper_95_CI = V4)
+  
+  # Add the column "Model_number" to the first position
+  stats <- mutate(stats, Model_number := value, Tree := MCC)
+  
+  # Add row names to a new column
+  stats <- rownames_to_column(stats, var = "Causal_relationship")
+  
+  return(stats)
+}
+
+### Calculate confidence intervals ###
+#NCuniform_stem
+NCuniform_stem_result_one <- choice(result_NCuniform_stem, "one", boot = 500)
+NCuniform_stem_result_two <- choice(result_NCuniform_stem, "two", boot = 500)
+NCuniform_stem_result_three <- choice(result_NCuniform_stem, "three", boot = 500)
+NCuniform_stem_result_four <- choice(result_NCuniform_stem, "four", boot = 500)
+
+NCuniform_stem_coef_stats_one <- generate_stats(result = NCuniform_stem_result_one, value = "One", MCC = "NCuniform_stem")
+NCuniform_stem_coef_stats_two <- generate_stats(result = NCuniform_stem_result_two, value = "Two", MCC = "NCuniform_stem")
+NCuniform_stem_coef_stats_three <- generate_stats(result = NCuniform_stem_result_three, value = "Three", MCC = "NCuniform_stem")
+NCuniform_stem_coef_stats_four <- generate_stats(result = NCuniform_stem_result_four, value = "Four", MCC = "NCuniform_stem")
+NCuniform_stem_coef_stats_all_mod <- rbind(NCuniform_stem_coef_stats_one, NCuniform_stem_coef_stats_two, NCuniform_stem_coef_stats_three, NCuniform_stem_coef_stats_four)
+
+#NCuniform_crown
+NCuniform_crown_result_one <- choice(result_NCuniform_crown, "one", boot = 500)
+NCuniform_crown_result_two <- choice(result_NCuniform_crown, "two", boot = 500)
+NCuniform_crown_result_three <- choice(result_NCuniform_crown, "three", boot = 500)
+NCuniform_crown_result_four <- choice(result_NCuniform_crown, "four", boot = 500)
+
+NCuniform_crown_coef_stats_one <- generate_stats(result = NCuniform_crown_result_one, value = "One", MCC = "NCuniform_crown")
+NCuniform_crown_coef_stats_two <- generate_stats(result = NCuniform_crown_result_two, value = "Two", MCC = "NCuniform_crown")
+NCuniform_crown_coef_stats_three <- generate_stats(result = NCuniform_crown_result_three, value = "Three", MCC = "NCuniform_crown")
+NCuniform_crown_coef_stats_four <- generate_stats(result = NCuniform_crown_result_four, value = "Four", MCC = "NCuniform_crown")
+NCuniform_crown_coef_stats_all_mod <- rbind(NCuniform_crown_coef_stats_one, NCuniform_crown_coef_stats_two, NCuniform_crown_coef_stats_three, NCuniform_crown_coef_stats_four)
+
+#FBD_stem
+FBD_stem_result_one <- choice(result_FBD_stem, "one", boot = 500)
+FBD_stem_result_two <- choice(result_FBD_stem, "two", boot = 500)
+FBD_stem_result_three <- choice(result_FBD_stem, "three", boot = 500)
+FBD_stem_result_four <- choice(result_FBD_stem, "four", boot = 500)
+
+FBD_stem_coef_stats_one <- generate_stats(result = FBD_stem_result_one, value = "One", MCC = "FBD_stem")
+FBD_stem_coef_stats_two <- generate_stats(result = FBD_stem_result_two, value = "Two", MCC = "FBD_stem")
+FBD_stem_coef_stats_three <- generate_stats(result = FBD_stem_result_three, value = "Three", MCC = "FBD_stem")
+FBD_stem_coef_stats_four <- generate_stats(result = FBD_stem_result_four, value = "Four", MCC = "FBD_stem")
+FBD_stem_coef_stats_all_mod <- rbind(FBD_stem_coef_stats_one, FBD_stem_coef_stats_two, FBD_stem_coef_stats_three, FBD_stem_coef_stats_four)
+
+#FBD_crown
+FBD_crown_result_one <- choice(result_FBD_crown, "one", boot = 500)
+FBD_crown_result_two <- choice(result_FBD_crown, "two", boot = 500)
+FBD_crown_result_three <- choice(result_FBD_crown, "three", boot = 500)
+FBD_crown_result_four <- choice(result_FBD_crown, "four", boot = 500)
+
+FBD_crown_coef_stats_one <- generate_stats(result = FBD_crown_result_one, value = "One", MCC = "FBD_crown")
+FBD_crown_coef_stats_two <- generate_stats(result = FBD_crown_result_two, value = "Two", MCC = "FBD_crown")
+FBD_crown_coef_stats_three <- generate_stats(result = FBD_crown_result_three, value = "Three", MCC = "FBD_crown")
+FBD_crown_coef_stats_four <- generate_stats(result = FBD_crown_result_four, value = "Four", MCC = "FBD_crown")
+FBD_crown_coef_stats_all_mod <- rbind(FBD_crown_coef_stats_one, FBD_crown_coef_stats_two, FBD_crown_coef_stats_three, FBD_crown_coef_stats_four)
+
+PA_coef_stats <- rbind(NCuniform_stem_coef_stats_all_mod, NCuniform_crown_coef_stats_all_mod, FBD_stem_coef_stats_all_mod, FBD_crown_coef_stats_all_mod)
+write.csv(PA_coef_stats, file = "/Users/louis.bell-roberts/Documents/Github/Division-of-labour/Phylogenetic_analysis/Ant_environmental_data/Analyses/Path_analysis/All_sp_474/Without_transformation/Phylo_PCA/Results/Path_analysis_Global_coef_stats_conditional_avg.csv", row.names = F)
+```
+
+```{r Average model path coefficient summaries}
+
+#Function for extracting Path coefficient, SE, and 95% confidence interval from the averaged model results
+generate_stats_avg_mods <- function(result, MCC) {
+  CS_WP <- c(round(result$coef["Colony_size", "Poly_id"], 2), 
+             round(result$se["Colony_size", "Poly_id"], 2), 
+             round(result$lower["Colony_size", "Poly_id"], 2), 
+             round(result$upper["Colony_size", "Poly_id"], 2))
+  
+  Climate_WP <- c(round(result$coef["Climate1", "Poly_id"], 2), 
+             round(result$se["Climate1", "Poly_id"], 2), 
+             round(result$lower["Climate1", "Poly_id"], 2), 
+             round(result$upper["Climate1", "Poly_id"], 2))
+  
+  WP_Climate <- c(round(result$coef["Poly_id", "Climate1"], 2), 
+             round(result$se["Poly_id", "Climate1"], 2), 
+             round(result$lower["Poly_id", "Climate1"], 2), 
+             round(result$upper["Poly_id", "Climate1"], 2))
+  
+  CS_Climate <- c(round(result$coef["Colony_size", "Climate1"], 2), 
+             round(result$se["Colony_size", "Climate1"], 2), 
+             round(result$lower["Colony_size", "Climate1"], 2), 
+             round(result$upper["Colony_size", "Climate1"], 2))
+  
+  Climate_CS <- c(round(result$coef["Climate1", "Colony_size"], 2), 
+             round(result$se["Climate1", "Colony_size"], 2), 
+             round(result$lower["Climate1", "Colony_size"], 2), 
+             round(result$upper["Climate1", "Colony_size"], 2))
+    
+  stats_noname <- as.data.frame(t(data.frame(CS_affects_WP = CS_WP, 
+                                             Climate_affects_WP = Climate_WP, 
+                                             WP_affects_Climate = WP_Climate, 
+                                             CS_affects_Climate = CS_Climate,
+                                             Climate_affects_CS = Climate_CS)))
+  
+  stats <- rename(stats_noname, 
+                                 Path_coefficient = V1, 
+                                 SE = V2, 
+                                 Lower_95_CI = V3, 
+                                 Upper_95_CI = V4)
+  
+  # Add the column "MCC" to the first position
+  stats <- mutate(stats, Tree := MCC)
+  
+  # Add row names to a new column
+  stats <- rownames_to_column(stats, var = "Causal_relationship")
+  
+  return(stats)
+}
+
+NCuniform_stem_coef_stats_avg_mod <- generate_stats_avg_mods(result = result_NCuniform_stem_average_conditional, MCC = "NCuniform_stem")
+NCuniform_crown_coef_stats_avg_mod <- generate_stats_avg_mods(result = result_NCuniform_crown_average_conditional, MCC = "NCuniform_crown")
+FBD_stem_coef_stats_avg_mod <- generate_stats_avg_mods(result = result_FBD_stem_average_conditional, MCC = "FBD_stem")
+FBD_crown_coef_stats_avg_mod <- generate_stats_avg_mods(result = result_FBD_crown_average_conditional, MCC = "FBD_crown")
+
+##Combine the four data frames
+combined_summaries_avg_mods <- rbind(NCuniform_stem_coef_stats_avg_mod, NCuniform_crown_coef_stats_avg_mod, FBD_stem_coef_stats_avg_mod, FBD_crown_coef_stats_avg_mod)
+# write.csv(combined_summaries_avg_mods, file = "/Users/louis.bell-roberts/Documents/Github/Division-of-labour/Phylogenetic_analysis/Ant_environmental_data/Analyses/Path_analysis/All_sp_474/Without_transformation/Phylo_PCA/Results/Path_analysis_Global_coef_stats_conditional_avged_models.csv", row.names = FALSE)
+
+
+```
